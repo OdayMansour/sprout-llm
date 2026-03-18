@@ -169,9 +169,6 @@ function TreeNode({ thread, depth, allThreads }: TreeNodeProps) {
             </svg>
           )}
           <Tooltip text={fullLabel}><span className="text-xs">{label}</span></Tooltip>
-          {msgCount > 0 && (
-            <span className="text-[10px] text-gray-500 flex-shrink-0">{msgCount}</span>
-          )}
         </button>
 
         {isForked && (
@@ -300,9 +297,6 @@ function SessionGroup({ session, allThreads, activeSessionId, isLast }: SessionG
           <div className="flex flex-col min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <Tooltip text={sessionLabel}><span className="text-[11px] font-medium">{sessionLabel}</span></Tooltip>
-              {msgCount > 0 && (
-                <span className="text-[10px] text-gray-600 flex-shrink-0">{msgCount}q</span>
-              )}
             </div>
             {tokenEntries.length > 0 && (() => {
               let totalCost: number | null = 0
@@ -378,8 +372,8 @@ export function ThreadTree() {
           title="New conversation"
           className="text-gray-500 hover:text-gray-300 transition-colors p-1 rounded hover:bg-gray-800"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M2.75 1h10.5c.966 0 1.75.784 1.75 1.75v3a1.75 1.75 0 0 1-1.75 1.75H2.75A1.75 1.75 0 0 1 1 5.75v-3C1 1.784 1.784 1 2.75 1ZM2.5 2.75v3c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-3a.25.25 0 0 0-.25-.25H2.75a.25.25 0 0 0-.25.25Zm0 6.5a.75.75 0 0 1 .75-.75h1a.75.75 0 0 1 0 1.5h-1a.75.75 0 0 1-.75-.75Zm4.25-.75a.75.75 0 0 0 0 1.5h5a.75.75 0 0 0 0-1.5h-5Zm-4.25 3.5a.75.75 0 0 1 .75-.75h1a.75.75 0 0 1 0 1.5h-1a.75.75 0 0 1-.75-.75Zm4.25-.75a.75.75 0 0 0 0 1.5h5a.75.75 0 0 0 0-1.5h-5Z" />
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 1a7 7 0 1 1 0 14A7 7 0 0 1 8 1zm0 1.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11zM8 5a.75.75 0 0 1 .75.75v1.5h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5h-1.5a.75.75 0 0 1 0-1.5h1.5v-1.5A.75.75 0 0 1 8 5z" />
           </svg>
         </button>
       </div>

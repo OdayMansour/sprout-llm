@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { ConversationProvider } from './context/ConversationContext'
 import { ChatContainer } from './components/ChatContainer'
 import { ThreadTree } from './components/ThreadTree'
@@ -10,6 +10,8 @@ function AppContent() {
     return localStorage.getItem('anthropic-api-key') ?? ''
   })
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768)
+  const [confirmingKey, setConfirmingKey] = useState(false)
+  const keyConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [modelKey, setModelKey] = useState<ModelKey>(() => {
     return (localStorage.getItem('model-key') as ModelKey) ?? 'haiku'
   })
@@ -85,13 +87,24 @@ function AppContent() {
             </div>
             <button
               onClick={() => {
-                localStorage.removeItem('anthropic-api-key')
-                setApiKey('')
+                if (confirmingKey) {
+                  if (keyConfirmTimer.current) clearTimeout(keyConfirmTimer.current)
+                  setConfirmingKey(false)
+                  localStorage.removeItem('anthropic-api-key')
+                  setApiKey('')
+                } else {
+                  setConfirmingKey(true)
+                  keyConfirmTimer.current = setTimeout(() => setConfirmingKey(false), 3000)
+                }
               }}
-              className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
-              title="Change API key"
+              className={`text-[11px] transition-colors ${
+                confirmingKey
+                  ? 'text-red-400'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+              title={confirmingKey ? 'Click again to confirm — your key will be cleared' : 'Change API key'}
             >
-              key
+              {confirmingKey ? 'Confirm?' : 'Change Key'}
             </button>
           </div>
         </div>
