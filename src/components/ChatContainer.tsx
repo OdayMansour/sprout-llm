@@ -215,26 +215,33 @@ export function ChatContainer({ apiKey, model }: Props) {
     setPendingFork({ selectedText, startOffset, endOffset, anchorX, anchorY, messageId })
   }
 
+  function handleForkAskHere(question: string) {
+    if (!pendingFork) return
+    const { selectedText } = pendingFork
+    setPendingFork(null)
+    window.getSelection()?.removeAllRanges()
+    const displayQuestion = formatSuggestionQuestion(question, selectedText)
+    sendMessage(displayQuestion, state.activeThreadId, undefined, selectedText)
+  }
+
   function handleFork(question: string) {
     if (!pendingFork) return
+    const { selectedText } = pendingFork
+    const displayQuestion = formatSuggestionQuestion(question, selectedText)
 
     const { newThreadId, inheritedMessages } = createFork(
       state.activeThreadId,
       pendingFork.messageId,
-      pendingFork.selectedText,
+      selectedText,
       pendingFork.startOffset,
       pendingFork.endOffset,
-      question,
+      displayQuestion,
     )
 
     setPendingFork(null)
     window.getSelection()?.removeAllRanges()
 
-    // Pass inheritedMessages directly so we don't depend on the state update
-    // having been applied yet (React batches the CREATE_FORK dispatch).
-    // Also pass the highlighted text as forkContext so the LLM knows what passage
-    // is being referenced.
-    sendMessage(question, newThreadId, inheritedMessages, pendingFork.selectedText)
+    sendMessage(displayQuestion, newThreadId, inheritedMessages, selectedText)
   }
 
   function formatSuggestionQuestion(question: string, selectedText: string): string {
@@ -441,6 +448,7 @@ export function ChatContainer({ apiKey, model }: Props) {
           selectedText={pendingFork.selectedText}
           anchorX={pendingFork.anchorX}
           anchorY={pendingFork.anchorY}
+          onAskHere={handleForkAskHere}
           onFork={handleFork}
           onDismiss={() => {
             setPendingFork(null)
