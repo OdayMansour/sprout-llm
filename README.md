@@ -4,6 +4,12 @@ Highlight any part of a Claude response and branch off into a new sub-conversati
 
 ---
 
+**Use it now with your own Claude API Key** (the key is stored locally and isn't sent to any servers): https://sprout.oday.site
+
+**Add it as a Progressive Web App** (Add to Home Screen) to persist the key longer than 7 days. 
+
+---
+
 Most chat interfaces are a single linear thread. The moment a response sparks a follow-up question, you either interrupt the current conversation or lose context trying to start a new one. This app lets you highlight any passage in a response and fork it into its own focused thread, while the original conversation stays intact. Navigate between threads via breadcrumbs and a sidebar tree, and jump back to any point in the hierarchy at any time.
 
 ## Features
