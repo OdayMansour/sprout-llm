@@ -1,4 +1,4 @@
-# llm-branching-chats
+# sprout-llm
 
 Highlight any part of a Claude response and branch off into a new sub-conversation — without losing the thread you came from.
 
