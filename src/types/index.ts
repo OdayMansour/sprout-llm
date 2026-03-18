@@ -4,6 +4,15 @@ export interface TokenUsage {
   model: string
 }
 
+export interface ForkSuggestion {
+  id: string
+  // The suggested text (as it appears in the clean, tag-stripped content)
+  selectedText: string
+  // Character offsets into the clean message content
+  startOffset: number
+  endOffset: number
+}
+
 export interface ForkMark {
   id: string
   // The ID of the thread that was forked from this passage
@@ -21,6 +30,8 @@ export interface Message {
   content: string
   // Fork marks embedded in this message (only on assistant messages)
   forks: ForkMark[]
+  // AI-suggested fork points, populated after streaming finishes
+  suggestions: ForkSuggestion[]
   // Whether this message is still being streamed
   streaming?: boolean
   // Token usage recorded when this message finished streaming (assistant messages only)

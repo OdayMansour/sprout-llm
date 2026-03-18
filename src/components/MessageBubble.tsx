@@ -2,7 +2,7 @@ import { useRef, useEffect, type MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
-import type { Message, ForkMark } from '../types'
+import type { Message, ForkMark, ForkSuggestion } from '../types'
 import { useConversation } from '../context/ConversationContext'
 
 interface Props {
@@ -11,7 +11,17 @@ interface Props {
   forkContext?: string
   /** Character offsets of the currently-pending fork selection — rendered as an amber highlight */
   pendingSelection?: { startOffset: number; endOffset: number }
+  /** Called when the user manually selects text — shows the fork popup */
   onTextSelect?: (
+    selectedText: string,
+    startOffset: number,
+    endOffset: number,
+    anchorX: number,
+    anchorY: number,
+    messageId: string,
+  ) => void
+  /** Called when the user clicks an AI-suggested fork point — shows the suggestion popup */
+  onSuggestionSelect?: (
     selectedText: string,
     startOffset: number,
     endOffset: number,
@@ -29,6 +39,7 @@ interface Props {
 function injectHighlights(
   content: string,
   forks: ForkMark[],
+  suggestions: ForkSuggestion[],
   pendingSelection?: { startOffset: number; endOffset: number },
 ): string {
   type Marker = { start: number; end: number; open: string; close: string }
@@ -39,6 +50,15 @@ function injectHighlights(
     open: `<fork-mark data-thread-id="${f.threadId}" data-fork-id="${f.id}">`,
     close: `</fork-mark>`,
   }))
+
+  for (const s of suggestions) {
+    markers.push({
+      start: s.startOffset,
+      end: s.endOffset,
+      open: `<fork-suggest-mark data-suggestion-id="${s.id}">`,
+      close: `</fork-suggest-mark>`,
+    })
+  }
 
   if (pendingSelection) {
     markers.push({
@@ -213,7 +233,7 @@ function snapToMarkdownBoundaries(raw: string, start: number, end: number): [num
   return [s, e]
 }
 
-export function MessageBubble({ message, forkContext, pendingSelection, onTextSelect }: Props) {
+export function MessageBubble({ message, forkContext, pendingSelection, onTextSelect, onSuggestionSelect }: Props) {
   const { setActiveThread, state } = useConversation()
   const containerRef = useRef<HTMLDivElement>(null)
   const lastMouseUpRef = useRef(0)
@@ -274,14 +294,30 @@ export function MessageBubble({ message, forkContext, pendingSelection, onTextSe
     }
   }, [])
 
-  function handleMouseUp(_e: MouseEvent) {
+  function handleMouseUp(e: MouseEvent) {
+    // Don't process text selection when clicking on an AI suggestion — that's handled by handleSuggestionClick
+    if ((e.target as Element)?.closest('[data-suggestion-id]')) return
     lastMouseUpRef.current = Date.now()
     processSelection()
   }
 
   if (isUser) {
+    const parentThreadId = forkContext
+      ? (state.threads[state.activeThreadId]?.parentThreadId ?? null)
+      : null
+
     return (
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-end items-center gap-2 mb-4">
+        {parentThreadId && (
+          <button
+            onClick={() => setActiveThread(parentThreadId)}
+            className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-stone-500 hover:text-stone-300 hover:bg-stone-700/60 transition-colors"
+            title="Go back to parent thread"
+          >
+            <ParentThreadIcon />
+            <span className="text-xs font-medium">Return from fork</span>
+          </button>
+        )}
         <div className="bg-stone-800 text-stone-100 rounded-2xl rounded-tr-sm px-4 py-3 max-w-[75%] text-base leading-relaxed">
           {forkContext && (
             <div className="mb-2 pl-3 border-l-2 border-stone-500/60 text-stone-400 text-xs italic line-clamp-3">
@@ -294,7 +330,30 @@ export function MessageBubble({ message, forkContext, pendingSelection, onTextSe
     )
   }
 
-  const processedContent = injectHighlights(message.content, message.forks, pendingSelection)
+  // Suggestions that haven't been forked yet, and aren't currently the pending selection
+  // (suppress overlapping suggestions to prevent double-injected/broken HTML)
+  const activeSuggestions = (message.suggestions ?? []).filter(
+    (s) =>
+      !message.forks.some((f) => f.startOffset <= s.startOffset && f.endOffset >= s.endOffset) &&
+      !(pendingSelection && pendingSelection.startOffset === s.startOffset && pendingSelection.endOffset === s.endOffset),
+  )
+
+  function handleSuggestionClick(suggestionId: string) {
+    const suggestion = (message.suggestions ?? []).find((s) => s.id === suggestionId)
+    if (!suggestion || !onSuggestionSelect) return
+    const el = containerRef.current?.querySelector(`[data-suggestion-id="${suggestionId}"]`)
+    const rect = el?.getBoundingClientRect()
+    onSuggestionSelect(
+      suggestion.selectedText,
+      suggestion.startOffset,
+      suggestion.endOffset,
+      rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
+      rect ? rect.bottom : window.innerHeight / 2,
+      message.id,
+    )
+  }
+
+  const processedContent = injectHighlights(message.content, message.forks, activeSuggestions, pendingSelection)
 
   return (
     <div className="flex justify-start mb-5">
@@ -307,7 +366,7 @@ export function MessageBubble({ message, forkContext, pendingSelection, onTextSe
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeRaw]}
-            components={markdownComponents(setActiveThread, state.threads)}
+            components={markdownComponents(setActiveThread, state.threads, handleSuggestionClick)}
           >
             {processedContent}
           </ReactMarkdown>
@@ -324,12 +383,32 @@ export function MessageBubble({ message, forkContext, pendingSelection, onTextSe
 function markdownComponents(
   setActiveThread: (id: string) => void,
   threads: Record<string, import('../types').Thread>,
+  onSuggestionClick: (suggestionId: string) => void,
 ) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const components: Record<string, any> = {
     // Pending selection highlight (shown while fork popup is open)
     'pending-sel': ({ children }: any) => (
       <mark className="bg-amber-400/50 text-stone-900 rounded-sm">{children}</mark>
+    ),
+
+    // AI-suggested fork point
+    'fork-suggest-mark': ({ children, 'data-suggestion-id': suggestionId }: any) => (
+      <span className="group relative inline" data-suggestion-id={suggestionId}>
+        <mark
+          className="bg-teal-300/35 text-teal-900 px-0.5 rounded cursor-pointer border-b-2 border-teal-600/50 hover:bg-teal-300/50 transition-colors"
+          onClick={() => suggestionId && onSuggestionClick(suggestionId)}
+        >
+          {children}
+        </mark>
+        <button
+          onClick={() => suggestionId && onSuggestionClick(suggestionId)}
+          className="inline-flex items-center ml-0.5 px-1 py-0.5 rounded text-[9px] bg-teal-500/15 text-teal-400 border border-teal-500/30 align-middle opacity-60 group-hover:opacity-100 transition-opacity"
+          title="AI-suggested fork point"
+        >
+          <SparkleIcon />
+        </button>
+      </span>
     ),
 
     // Custom fork-mark element injected before parsing
@@ -468,6 +547,22 @@ function ForkIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
       <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0 2.122a2.25 2.25 0 1 0-1.5 0v.878A2.25 2.25 0 0 0 5.75 8.5h1.5v2.128a2.251 2.251 0 1 0 1.5 0V8.5h1.5a2.25 2.25 0 0 0 2.25-2.25v-.878a2.25 2.25 0 1 0-1.5 0v.878a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 5 6.25v-.878zm3.75 7.378a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm3-8.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z" />
+    </svg>
+  )
+}
+
+function ParentThreadIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0 2.122a2.25 2.25 0 1 0-1.5 0v.878A2.25 2.25 0 0 0 5.75 8.5h1.5v2.128a2.251 2.251 0 1 0 1.5 0V8.5h1.5a2.25 2.25 0 0 0 2.25-2.25v-.878a2.25 2.25 0 1 0-1.5 0v.878a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 5 6.25v-.878zm3.75 7.378a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm3-8.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z" />
+    </svg>
+  )
+}
+
+function SparkleIcon() {
+  return (
+    <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M7.657 6.247c.11-.33.576-.33.686 0l.645 1.937a2.89 2.89 0 0 0 1.829 1.828l1.936.645c.33.11.33.576 0 .686l-1.937.645a2.89 2.89 0 0 0-1.828 1.829l-.645 1.936a.361.361 0 0 1-.686 0l-.645-1.937a2.89 2.89 0 0 0-1.828-1.828l-1.937-.645a.361.361 0 0 1 0-.686l1.937-.645a2.89 2.89 0 0 0 1.828-1.828l.645-1.937zM3.794 1.148a.217.217 0 0 1 .412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 0 1 0 .412l-1.162.387A1.734 1.734 0 0 0 4.593 5.69l-.387 1.162a.217.217 0 0 1-.412 0L3.407 5.69A1.734 1.734 0 0 0 2.31 4.593l-1.162-.387a.217.217 0 0 1 0-.412l1.162-.387A1.734 1.734 0 0 0 3.407 2.31l.387-1.162zM10.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.156 1.156 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.156 1.156 0 0 0-.732-.732L9.1 2.137a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732L10.863.1z" />
     </svg>
   )
 }

@@ -77,7 +77,9 @@ Style:
 - Explain the "why", not just the "what".
 - Use concrete examples and analogies before abstract definitions.
 - When a question has a genuinely complex or contested answer, say so and explain the competing views rather than picking a side.
-- Keep responses focused. Don't pad with summaries or unnecessary caveats.`
+- Keep responses focused. Don't pad with summaries or unnecessary caveats.
+
+As you write each sentence, place <fork-suggest> tags inline around individual terms or short phrases that a curious reader might want to explore in depth. Put the tags at the moment those words appear — not at the end of the response. Example of correct placement: "When a function calls itself, the <fork-suggest>call stack</fork-suggest> grows with each invocation until it hits the limit." Use 1–3 tags per response, spread naturally through the text. Each tagged passage must be 2–15 words. Never tag code. Never add tags after finishing the response body — only tag text as you write it. Omit tags on short responses (under 60 words).`
 
   const system = forkContext
     ? `${baseSystem}\n\nThis conversation was forked. The user selected a specific passage from a previous response and is asking a question about that passage.\n\n<highlighted_passage>\n${forkContext}\n</highlighted_passage>\n\nIMPORTANT: The user's question is specifically about the highlighted passage above — not about the broader conversation topic. Focus your answer on explaining or expanding on the highlighted passage itself. Do not simply continue the previous conversation topic.`

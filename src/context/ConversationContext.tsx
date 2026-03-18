@@ -1,6 +1,6 @@
 import { createContext, useContext, useReducer, useCallback, type ReactNode } from 'react'
 import { v4 as uuid } from 'uuid'
-import type { ConversationState, Session, Thread, Message, ForkMark, TokenUsage } from '../types'
+import type { ConversationState, Session, Thread, Message, ForkMark, ForkSuggestion, TokenUsage } from '../types'
 
 function createSessionAndRoot(): { session: Session; rootThread: Thread } {
   const sessionId = uuid()
@@ -74,7 +74,14 @@ type Action =
   | { type: 'SET_ACTIVE_THREAD'; threadId: string }
   | { type: 'ADD_MESSAGE'; threadId: string; message: Message }
   | { type: 'APPEND_STREAM'; threadId: string; messageId: string; chunk: string }
-  | { type: 'FINISH_STREAM'; threadId: string; messageId: string; tokenUsage?: TokenUsage }
+  | {
+      type: 'FINISH_STREAM'
+      threadId: string
+      messageId: string
+      tokenUsage?: TokenUsage
+      cleanContent?: string
+      suggestions?: ForkSuggestion[]
+    }
   | { type: 'REMOVE_MESSAGE'; threadId: string; messageId: string }
   | {
       type: 'CREATE_FORK'
@@ -145,7 +152,13 @@ function reducer(state: ConversationState, action: Action): ConversationState {
             ...thread,
             messages: thread.messages.map((m) =>
               m.id === action.messageId
-                ? { ...m, streaming: false, ...(action.tokenUsage ? { tokenUsage: action.tokenUsage } : {}) }
+                ? {
+                    ...m,
+                    streaming: false,
+                    ...(action.cleanContent !== undefined ? { content: action.cleanContent } : {}),
+                    ...(action.suggestions !== undefined ? { suggestions: action.suggestions } : {}),
+                    ...(action.tokenUsage ? { tokenUsage: action.tokenUsage } : {}),
+                  }
                 : m,
             ),
           },
@@ -305,7 +318,7 @@ interface ConversationContextValue {
   addUserMessage: (threadId: string, content: string) => Message
   addAssistantMessage: (threadId: string) => Message
   appendStream: (threadId: string, messageId: string, chunk: string) => void
-  finishStream: (threadId: string, messageId: string, tokenUsage?: TokenUsage) => void
+  finishStream: (threadId: string, messageId: string, tokenUsage?: TokenUsage, cleanContent?: string, suggestions?: ForkSuggestion[]) => void
   removeMessage: (threadId: string, messageId: string) => void
   createFork: (
     parentThreadId: string,
@@ -339,6 +352,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       role: 'user',
       content,
       forks: [],
+      suggestions: [],
     }
     dispatch({ type: 'ADD_MESSAGE', threadId, message })
     return message
@@ -350,6 +364,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       role: 'assistant',
       content: '',
       forks: [],
+      suggestions: [],
       streaming: true,
     }
     dispatch({ type: 'ADD_MESSAGE', threadId, message })
@@ -363,9 +378,12 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     [],
   )
 
-  const finishStream = useCallback((threadId: string, messageId: string, tokenUsage?: TokenUsage) => {
-    dispatch({ type: 'FINISH_STREAM', threadId, messageId, tokenUsage })
-  }, [])
+  const finishStream = useCallback(
+    (threadId: string, messageId: string, tokenUsage?: TokenUsage, cleanContent?: string, suggestions?: ForkSuggestion[]) => {
+      dispatch({ type: 'FINISH_STREAM', threadId, messageId, tokenUsage, cleanContent, suggestions })
+    },
+    [],
+  )
 
   const removeMessage = useCallback((threadId: string, messageId: string) => {
     dispatch({ type: 'REMOVE_MESSAGE', threadId, messageId })

@@ -2,14 +2,17 @@ import {
   useState,
   useRef,
   useEffect,
+  useLayoutEffect,
   useCallback,
   type KeyboardEvent,
 } from 'react'
 import { useConversation } from '../context/ConversationContext'
 import { MessageBubble } from './MessageBubble'
 import { ForkPopup } from './ForkPopup'
+import { SuggestionPopup } from './SuggestionPopup'
 import { BreadcrumbNav } from './BreadcrumbNav'
 import { streamChat, generateTitle } from '../utils/api'
+import { parseSuggestions } from '../utils/suggestions'
 import type { Message } from '../types'
 
 interface Props {
@@ -18,6 +21,15 @@ interface Props {
 }
 
 interface PendingFork {
+  selectedText: string
+  startOffset: number
+  endOffset: number
+  anchorX: number
+  anchorY: number
+  messageId: string
+}
+
+interface PendingSuggestion {
   selectedText: string
   startOffset: number
   endOffset: number
@@ -53,19 +65,30 @@ export function ChatContainer({ apiKey, model }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [retryInfo, setRetryInfo] = useState<RetryInfo | null>(null)
   const [pendingFork, setPendingFork] = useState<PendingFork | null>(null)
+  const [pendingSuggestion, setPendingSuggestion] = useState<PendingSuggestion | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const accumulatedContentRef = useRef('')
 
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeThread.messages])
 
+  // Jump to bottom synchronously when switching threads (before paint,
+  // so the smooth-scroll effect below sees the element already in view)
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [state.activeThreadId])
+
   // Clear transient state when thread changes
   useEffect(() => {
     setPendingFork(null)
+    setPendingSuggestion(null)
     setError(null)
     setRetryInfo(null)
   }, [state.activeThreadId])
@@ -86,14 +109,21 @@ export function ChatContainer({ apiKey, model }: Props) {
 
       const controller = new AbortController()
       abortControllerRef.current = controller
+      accumulatedContentRef.current = ''
 
       await streamChat(apiKey, messagesForApi, {
-        onChunk: (chunk) => appendStream(threadId, assistantMsgId, chunk),
+        onChunk: (chunk) => {
+          accumulatedContentRef.current += chunk
+          appendStream(threadId, assistantMsgId, chunk)
+        },
         onDone: (usage) => {
+          const { content: cleanContent, suggestions } = parseSuggestions(accumulatedContentRef.current)
           finishStream(
             threadId,
             assistantMsgId,
             usage ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, model } : undefined,
+            cleanContent,
+            suggestions,
           )
           setIsStreaming(false)
           abortControllerRef.current = null
@@ -134,7 +164,7 @@ export function ChatContainer({ apiKey, model }: Props) {
         : content
       const messagesForApi = [
         ...contextMessages.filter((m) => !m.streaming),
-        { id: 'tmp', role: 'user' as const, content: apiContent, forks: [], streaming: false },
+        { id: 'tmp', role: 'user' as const, content: apiContent, forks: [], suggestions: [], streaming: false },
       ]
 
       // Is this the first user message in a root thread with no title yet?
@@ -207,6 +237,53 @@ export function ChatContainer({ apiKey, model }: Props) {
     sendMessage(question, newThreadId, inheritedMessages, pendingFork.selectedText)
   }
 
+  function formatSuggestionQuestion(question: string, selectedText: string): string {
+    if (question !== 'Explain this') return question
+    const truncated = selectedText.length > 80 ? selectedText.slice(0, 80) + '…' : selectedText
+    return `Explain: "${truncated}"`
+  }
+
+  function handleSuggestionSelect(
+    selectedText: string,
+    startOffset: number,
+    endOffset: number,
+    anchorX: number,
+    anchorY: number,
+    messageId: string,
+  ) {
+    const message = activeThread.messages.find((m) => m.id === messageId)
+    if (message?.streaming) return
+    setPendingSuggestion({ selectedText, startOffset, endOffset, anchorX, anchorY, messageId })
+  }
+
+  function handleSuggestionAskHere(question: string) {
+    if (!pendingSuggestion) return
+    const { selectedText } = pendingSuggestion
+    setPendingSuggestion(null)
+    // When using the default question, label it with the passage so the user
+    // can tell which suggestion they acted on.
+    const displayQuestion = formatSuggestionQuestion(question, selectedText)
+    sendMessage(displayQuestion, state.activeThreadId, undefined, selectedText)
+  }
+
+  function handleSuggestionFork(question: string) {
+    if (!pendingSuggestion) return
+    const { selectedText, messageId, startOffset, endOffset } = pendingSuggestion
+    const displayQuestion = formatSuggestionQuestion(question, selectedText)
+
+    const { newThreadId, inheritedMessages } = createFork(
+      state.activeThreadId,
+      messageId,
+      selectedText,
+      startOffset,
+      endOffset,
+      displayQuestion, // forkQuestion must match the user message content for the quote to render
+    )
+
+    setPendingSuggestion(null)
+    sendMessage(displayQuestion, newThreadId, inheritedMessages, selectedText)
+  }
+
   const isEmpty = activeThread.messages.length === 0
   const isForkedThread = activeThread.parentThreadId !== null
 
@@ -237,34 +314,44 @@ export function ChatContainer({ apiKey, model }: Props) {
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-4">
         <div className="max-w-2xl mx-auto w-full">
         {isEmpty ? (
           <EmptyState isForked={isForkedThread} />
-        ) : (
-          activeThread.messages.map((message, index) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              pendingSelection={
-                pendingFork?.messageId === message.id
-                  ? { startOffset: pendingFork.startOffset, endOffset: pendingFork.endOffset }
-                  : undefined
-              }
-              forkContext={
-                // Show the highlighted passage as a quote on the fork question message.
-                // The forked thread starts with inherited parent messages, so the fork
-                // question is identified by matching forkQuestion content, not by index.
-                isForkedThread &&
-                message.role === 'user' &&
-                message.content === activeThread.forkQuestion
-                  ? activeThread.forkContext ?? undefined
-                  : undefined
-              }
-              onTextSelect={handleTextSelect}
-            />
-          ))
-        )}
+        ) : (() => {
+          // In forked threads, dim all messages that were inherited from the parent
+          // (i.e. everything before the fork question message)
+          const forkQuestionIdx = isForkedThread
+            ? activeThread.messages.findIndex(
+                (m) => m.role === 'user' && m.content === activeThread.forkQuestion,
+              )
+            : -1
+
+          return activeThread.messages.map((message, index) => {
+            const isInherited = forkQuestionIdx > 0 && index < forkQuestionIdx
+            return (
+              <div key={message.id} className={isInherited ? 'opacity-35 pointer-events-none' : undefined}>
+                <MessageBubble
+                  message={message}
+                  pendingSelection={
+                    pendingFork?.messageId === message.id
+                      ? { startOffset: pendingFork.startOffset, endOffset: pendingFork.endOffset }
+                      : undefined
+                  }
+                  forkContext={
+                    isForkedThread &&
+                    message.role === 'user' &&
+                    message.content === activeThread.forkQuestion
+                      ? activeThread.forkContext ?? undefined
+                      : undefined
+                  }
+                  onTextSelect={handleTextSelect}
+                  onSuggestionSelect={handleSuggestionSelect}
+                />
+              </div>
+            )
+          })
+        })()}
         <div ref={messagesEndRef} />
         </div>
       </div>
@@ -348,7 +435,7 @@ export function ChatContainer({ apiKey, model }: Props) {
         </div>
       </div>
 
-      {/* Fork popup */}
+      {/* Fork popup (manual text selection) */}
       {pendingFork && (
         <ForkPopup
           selectedText={pendingFork.selectedText}
@@ -359,6 +446,18 @@ export function ChatContainer({ apiKey, model }: Props) {
             setPendingFork(null)
             window.getSelection()?.removeAllRanges()
           }}
+        />
+      )}
+
+      {/* Suggestion popup (AI-suggested fork points) */}
+      {pendingSuggestion && (
+        <SuggestionPopup
+          selectedText={pendingSuggestion.selectedText}
+          anchorX={pendingSuggestion.anchorX}
+          anchorY={pendingSuggestion.anchorY}
+          onAskHere={handleSuggestionAskHere}
+          onFork={handleSuggestionFork}
+          onDismiss={() => setPendingSuggestion(null)}
         />
       )}
     </div>
