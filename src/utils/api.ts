@@ -48,7 +48,7 @@ export async function streamChat(
   callbacks: StreamCallbacks,
   forkContext?: string,
   abortSignal?: AbortSignal,
-  model: string = MODELS.haiku,
+  model: string = MODELS.sonnet,
 ) {
   const client = getClient(apiKey)
 
