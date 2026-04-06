@@ -13,7 +13,7 @@ function AppContent() {
   const [confirmingKey, setConfirmingKey] = useState(false)
   const keyConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [modelKey, setModelKey] = useState<ModelKey>(() => {
-    return (localStorage.getItem('model-key') as ModelKey) ?? 'haiku'
+    return (localStorage.getItem('model-key') as ModelKey) ?? 'sonnet'
   })
 
   function handleModelChange(key: ModelKey) {
