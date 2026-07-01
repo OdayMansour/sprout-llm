@@ -24,7 +24,7 @@ Most chat interfaces are a single linear thread. The moment a response sparks a 
 
 - React 19 + TypeScript + Vite
 - Tailwind CSS v4
-- `@anthropic-ai/sdk` (streaming, `claude-haiku-4-5`, `claude-sonnet-4-6`)
+- `@anthropic-ai/sdk` (streaming, `claude-haiku-4-5`, `claude-sonnet-5`)
 - `uuid`, localStorage
 
 ## Getting started

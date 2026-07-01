@@ -3,7 +3,7 @@ import type { Message } from '../types'
 
 export const MODELS = {
   haiku: 'claude-haiku-4-5',
-  sonnet: 'claude-sonnet-4-6',
+  sonnet: 'claude-sonnet-5',
 } as const
 
 export type ModelKey = keyof typeof MODELS
