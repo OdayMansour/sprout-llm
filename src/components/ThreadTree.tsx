@@ -8,8 +8,8 @@ import type { Session, Thread } from '../types'
 // USD per million tokens — update when Anthropic changes pricing
 const MODEL_PRICING: Record<string, { inputPerM: number; outputPerM: number }> = {
   'claude-haiku-4-5':  { inputPerM: 1.00, outputPerM: 5.00  },
-  'claude-sonnet-4-6': { inputPerM: 3.00, outputPerM: 15.00 },
-  'claude-opus-4-6':   { inputPerM: 5.00, outputPerM: 25.00 },
+  'claude-sonnet-5':   { inputPerM: 3.00, outputPerM: 15.00 },
+  'claude-opus-4-8':   { inputPerM: 5.00, outputPerM: 25.00 },
 }
 
 function calcCost(model: string, inputTokens: number, outputTokens: number): number | null {
@@ -32,7 +32,7 @@ function fmtK(n: number): string {
 }
 
 function shortModelName(model: string): string {
-  // "claude-haiku-4-5" → "haiku", "claude-sonnet-4-6" → "sonnet"
+  // "claude-haiku-4-5" → "haiku", "claude-sonnet-5" → "sonnet"
   return model.replace(/^claude-/, '').split('-')[0]
 }
 
