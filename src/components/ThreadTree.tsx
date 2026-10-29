@@ -7,10 +7,10 @@ import type { Session, Thread } from '../types'
 
 // USD per million tokens — update when Anthropic changes pricing
 const MODEL_PRICING: Record<string, { inputPerM: number; outputPerM: number }> = {
-  'claude-haiku-5-5':  { inputPerM: 1.00, outputPerM: 5.00  },
-  'claude-sonnet-5-5': { inputPerM: 3.00, outputPerM: 15.00 },
+  'claude-haiku-5-5':  { inputPerM: 0.10, outputPerM: 0.50  }, // prompts ≤100k tokens
+  'claude-sonnet-5-5': { inputPerM: 2.00, outputPerM: 10.00 },
   'claude-haiku-4-5':  { inputPerM: 1.00, outputPerM: 5.00  },
-  'claude-sonnet-5':   { inputPerM: 3.00, outputPerM: 15.00 },
+  'claude-sonnet-5':   { inputPerM: 2.00, outputPerM: 10.00 },
   'claude-opus-4-8':   { inputPerM: 5.00, outputPerM: 25.00 },
 }
 
