@@ -6,7 +6,7 @@
 A full-stack React/TypeScript chat app ("Sprout") with conversation branching and multi-session history.
 
 ### Feature set
-- **Chat with Claude** (claude-haiku-4-5) via streaming
+- **Chat with Claude** (claude-haiku-5-5) via streaming
 - **Fork conversations** by highlighting text in any assistant response → fork popup → question → new thread with full parent context inherited
 - **Visual fork indicators** on parent thread: highlighted passage in amber + fork icon badge; click to navigate
 - **Wikipedia-like navigation**: breadcrumb nav at top, collapsible sidebar session/thread tree

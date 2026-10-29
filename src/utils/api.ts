@@ -2,8 +2,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { Message } from '../types'
 
 export const MODELS = {
-  haiku: 'claude-haiku-4-5',
-  sonnet: 'claude-sonnet-5',
+  haiku: 'claude-haiku-5-5',
+  sonnet: 'claude-sonnet-5-5',
 } as const
 
 export type ModelKey = keyof typeof MODELS
